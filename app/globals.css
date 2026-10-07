@@ -276,3 +276,54 @@ h1 .edition{font-family:inherit;font-weight:500;font-size:10px;letter-spacing:.0
 @media(max-width:767px){body:has(.detail-sheet) .view-controls{visibility:hidden}}
 
 @media(max-height:600px) and (orientation:landscape){body:has(.detail-sheet) .bottom-dock{left:12px;right:324px;width:auto;transform:none;max-width:none;margin:0}}
+
+/* ===== RESPONSIVE FIXES: all-device polish ===== */
+
+/* --- Loading indicator: prevent overflow on 320px screens --- */
+.loading { min-width: min(290px, calc(100vw - 32px)); }
+
+/* --- h1 scale-down at tablet widths to avoid identity/top-actions collision --- */
+@media(max-width:900px) {
+  h1 { font-size: 26px; }
+}
+
+/* --- Layers panel at tablet: narrower, no canvas overlap --- */
+@media(max-width:900px) {
+  .layers-panel { width: 200px; left: 16px; }
+}
+
+/* --- Search panel at tablet: prevent spill off-screen --- */
+@media(max-width:900px) {
+  .search-panel { width: min(300px, calc(100vw - 60px)); }
+}
+
+/* --- Bottom dock at narrow tablets (600-768px): full shrink --- */
+@media(max-width:768px) and (min-width:480px) {
+  .bottom-dock { max-width: min(460px, calc(100vw - 32px)); }
+}
+
+/* --- Detail sheet on tablet (768–1024px): glass variant --- */
+@media(min-width:768px) and (max-width:1024px) {
+  .detail-sheet { background: var(--glass-bg-strong) !important; }
+}
+
+/* --- Dark mode top-actions buttons specificity fix --- */
+.dark .top-actions button {
+  background: var(--glass-bg) !important;
+  border-color: var(--glass-border) !important;
+  color: #b0bec8;
+}
+.dark .top-actions button:hover {
+  background: var(--glass-bg-strong) !important;
+}
+
+/* --- detail-sheet: ensure internal gap when inline gap:16 is set (desktop) --- */
+@media(min-width:768px) {
+  .detail-sheet .detail-header { margin-bottom: 0; }
+  .detail-sheet .detail-actions { padding-top: 10px; }
+}
+
+/* --- View-controls on tablet: keep away from dock bottom --- */
+@media(min-width:768px) and (max-width:1000px) {
+  .view-controls { right: 16px; }
+}
