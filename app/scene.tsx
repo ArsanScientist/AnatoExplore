@@ -1,4 +1,4 @@
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,useMemo} from 'react';
 import * as T from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/examples/jsm/environments/RoomEnvironment.js';
@@ -7,6 +7,119 @@ import {createExplosionLayout} from './explosion-layout';
 import {decodeModelResponse} from './model-download';
 import {PointerTap} from './pointer-tap';
 import {SYSTEMS,type Atlas,type SceneState} from './anatomy';
+
+const MARBLE_VERTEX = `
+  varying vec3 vWorldPos;
+  void main() {
+    vec4 world = modelMatrix * vec4(position, 1.0);
+    vWorldPos = world.xyz;
+    gl_Position = projectionMatrix * viewMatrix * world;
+  }
+`;
+
+// GLSL functions must be declared before use — hash helpers first, then noise, then fbm, then veins, then main.
+const MARBLE_FRAGMENT = `
+  varying vec3 vWorldPos;
+  uniform float uTime;
+  uniform int uDark;
+
+  // --- hash helpers ---
+  vec3 hash3v(vec3 p) {
+    p = vec3(dot(p, vec3(127.1, 311.7, 74.7)),
+             dot(p, vec3(269.5, 183.3, 246.1)),
+             dot(p, vec3(113.5, 271.9, 124.6)));
+    return fract(sin(p) * 43758.5453);
+  }
+  vec2 hash2v(vec2 p) {
+    return fract(sin(vec2(dot(p, vec2(127.1, 311.7)),
+                         dot(p, vec2(269.5, 183.3)))) * 43758.5453);
+  }
+
+  // --- value noise (smooth, no forward ref) ---
+  float vnoise(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    // eight corners
+    float n000 = hash3v(i + vec3(0,0,0)).x;
+    float n100 = hash3v(i + vec3(1,0,0)).x;
+    float n010 = hash3v(i + vec3(0,1,0)).x;
+    float n110 = hash3v(i + vec3(1,1,0)).x;
+    float n001 = hash3v(i + vec3(0,0,1)).x;
+    float n101 = hash3v(i + vec3(1,0,1)).x;
+    float n011 = hash3v(i + vec3(0,1,1)).x;
+    float n111 = hash3v(i + vec3(1,1,1)).x;
+    return mix(mix(mix(n000,n100,f.x), mix(n010,n110,f.x), f.y),
+               mix(mix(n001,n101,f.x), mix(n011,n111,f.x), f.y), f.z);
+  }
+
+  // --- fractional Brownian motion (4 octaves) ---
+  float fbm4(vec3 p) {
+    float v = 0.0, a = 0.5, f = 1.0;
+    for (int i = 0; i < 4; i++) {
+      v += a * abs(vnoise(p * f) * 2.0 - 1.0);
+      f *= 2.02; a *= 0.5;
+    }
+    return v;
+  }
+
+  // --- Voronoi veins: returns nearest-cell squared distance ---
+  float voronoiVeins(vec2 p) {
+    vec2 pi = floor(p);
+    vec2 pf = fract(p);
+    float d = 10.0;
+    for (int y = -1; y <= 1; y++) {
+      for (int x = -1; x <= 1; x++) {
+        vec2 nb = vec2(float(x), float(y));
+        vec2 diff = nb + hash2v(pi + nb) - pf;
+        d = min(d, dot(diff, diff));
+      }
+    }
+    return d;
+  }
+
+  void main() {
+    vec2 uv = vWorldPos.xz * 0.5;
+
+    // --- palette ---
+    vec3 lightBase  = vec3(0.980, 0.976, 0.965);
+    vec3 lightVein  = vec3(0.820, 0.790, 0.720);
+    vec3 darkBase   = vec3(0.078, 0.094, 0.118);
+    vec3 darkVein1  = vec3(0.790, 0.660, 0.300);
+    vec3 darkVein2  = vec3(0.290, 0.360, 0.430);
+
+    bool isDark = (uDark == 1);
+    vec3 base       = isDark ? darkBase  : lightBase;
+    vec3 veinColor  = isDark ? darkVein1 : lightVein;
+    vec3 veinColor2 = isDark ? darkVein2 : lightVein * 0.70;
+
+    // --- stone texture ---
+    float stone = fbm4(vWorldPos * 0.8) * 0.025;
+
+    // --- vein network (three scales, very slowly animated) ---
+    float v1 = voronoiVeins(uv * 4.5 + uTime * 0.003);
+    float v2 = voronoiVeins(uv * 2.4 - uTime * 0.002);
+    float v3 = voronoiVeins(uv * 9.0 + uTime * 0.001);
+
+    float vm = smoothstep(0.022, 0.004, v1) * 0.75
+             + smoothstep(0.035, 0.012, v2) * 0.35
+             + smoothstep(0.018, 0.004, v3) * 0.18;
+    vm = clamp(vm, 0.0, 1.0);
+
+    // --- subtle shimmer on veins (2 % amplitude, 8 s period) ---
+    float shimmer = sin(uTime * 0.785 + vWorldPos.x * 0.5 + vWorldPos.z * 0.3) * 0.02 * vm;
+
+    vec3 color = mix(base, veinColor, vm);
+    color = mix(color, veinColor2, vm * 0.40);
+    color += stone + shimmer;
+
+    // --- gentle vignette at the floor edges ---
+    float edge = length(uv) * 0.04;
+    color = mix(color, base * 0.88, clamp(edge - 0.6, 0.0, 0.35));
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
 interface Props {atlas:Atlas;state:SceneState;onSelect:(id:string)=>void;onProgress:(n:number)=>void;onError:(s:string)=>void}
 export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:Props){
  const host=useRef<HTMLDivElement>(null),latest=useRef(state),select=useRef(onSelect);
@@ -17,18 +130,49 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
   const abort=new AbortController();
   let renderer:T.WebGLRenderer;
   try{renderer=new T.WebGLRenderer({antialias:true,alpha:false,powerPreference:'high-performance'});}catch{onError('This browser could not start the 3D viewer. Please try a browser with WebGL enabled.');return;}
-  renderer.setPixelRatio(Math.min(devicePixelRatio,innerWidth<768?1.5:2));renderer.setClearColor('#f2f3f3');renderer.outputColorSpace=T.SRGBColorSpace;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;el.appendChild(renderer.domElement);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, innerWidth < 768 ? 1.5 : 2));
+  renderer.setClearColor(0x000000, 0);
+  renderer.outputColorSpace = T.SRGBColorSpace;
+  renderer.toneMapping = T.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.12;
+  el.appendChild(renderer.domElement);
   renderer.domElement.setAttribute('aria-label','Interactive human anatomy. Drag to orbit, pinch or scroll to zoom, and tap a structure to inspect it.');
   const scene=new T.Scene(),camera=new T.PerspectiveCamera(34,1,.005,100),controls=new OrbitControls(camera,renderer.domElement);
   camera.position.set(1.4,1.05,3.6);controls.target.set(0,.85,0);controls.enableDamping=true;controls.dampingFactor=.085;controls.minDistance=.07;controls.maxDistance=40;controls.maxPolarAngle=Math.PI*.96;controls.addEventListener('change',()=>{dirty=true;});
   const pmrem=new T.PMREMGenerator(renderer),room=new RoomEnvironment(),env=pmrem.fromScene(room,.04);scene.environment=env.texture;room.dispose();pmrem.dispose();
-  scene.add(new T.HemisphereLight(0xffffff,0xa7acb2,1.05));
-  const key=new T.DirectionalLight(0xfffaf4,2.3);key.position.set(-2,4,3);scene.add(key);
-  const rim=new T.DirectionalLight(0xe9f0ff,1.8);rim.position.set(2,2,-3);scene.add(rim);
-  const ground=new T.Mesh(new T.CircleGeometry(30,96),new T.MeshStandardMaterial({color:0xd5d9dc,roughness:1}));ground.rotation.x=-Math.PI/2;ground.position.y=-.019;scene.add(ground);
-  const platform=new T.Mesh(new T.CylinderGeometry(.68,.7,.028,100),new T.MeshStandardMaterial({color:0xeeeeec,metalness:.12,roughness:.67}));platform.position.y=-.016;scene.add(platform);
-  const ring=new T.Mesh(new T.RingGeometry(.63,.632,128),new T.MeshBasicMaterial({color:0x8c969f,transparent:true,opacity:.4,side:T.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.001;scene.add(ring);
-  const innerRing=new T.Mesh(new T.RingGeometry(.55,.551,128),new T.MeshBasicMaterial({color:0xa4aeb8,transparent:true,opacity:.16,side:T.DoubleSide}));innerRing.rotation.x=-Math.PI/2;innerRing.position.y=.001;scene.add(innerRing);
+  
+  // Marble floor plane with procedural shader
+  const isDarkNow = () => document.documentElement.classList.contains('dark') ? 1 : 0;
+  const marbleUniforms = { uTime: { value: 0 }, uDark: { value: isDarkNow() } };
+  const marbleMaterial = new T.ShaderMaterial({
+    uniforms: marbleUniforms,
+    vertexShader: MARBLE_VERTEX,
+    fragmentShader: MARBLE_FRAGMENT,
+    side: T.DoubleSide,
+  });
+  const marbleFloor = new T.Mesh(new T.PlaneGeometry(80, 80), marbleMaterial);
+  marbleFloor.rotation.x = -Math.PI / 2;
+  marbleFloor.position.y = -0.035;
+  scene.add(marbleFloor);
+  // Keep marble in sync with dark-mode class changes
+  const themeObs = new MutationObserver(() => { marbleUniforms.uDark.value = isDarkNow(); dirty = true; });
+  themeObs.observe(document.documentElement, { attributeFilter: ['class'] });
+  
+  scene.add(new T.HemisphereLight(0xffffff, 0x1a2230, 0.8));
+  const key = new T.DirectionalLight(0xfff5e6, 3.0); key.position.set(-3, 5, 2); scene.add(key);
+  const fill = new T.DirectionalLight(0xb8d0ff, 1.3); fill.position.set(4, 2, -3); scene.add(fill);
+  const rim = new T.DirectionalLight(0xffeedd, 2.0); rim.position.set(-2, 3, -4); scene.add(rim);
+  const platform = new T.Mesh(
+    new T.CylinderGeometry(0.68, 0.7, 0.028, 100),
+    new T.MeshStandardMaterial({ color: 0xc8c4bc, metalness: 0.05, roughness: 0.65 })
+  );
+  platform.position.y = -0.016;
+  scene.add(platform);
+  
+  const ring = new T.Mesh(new T.RingGeometry(0.63, 0.632, 128), new T.MeshBasicMaterial({ color: 0x8c969f, transparent: true, opacity: 0.35, side: T.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.001; scene.add(ring);
+  const innerRing = new T.Mesh(new T.RingGeometry(0.55, 0.551, 128), new T.MeshBasicMaterial({ color: 0xa4aeb8, transparent: true, opacity: 0.12, side: T.DoubleSide }));
+  innerRing.rotation.x = -Math.PI / 2; innerRing.position.y = 0.001; scene.add(innerRing);
   const width=T.MathUtils.ceilPowerOfTwo(atlas.parts.length),data=new Float32Array(width*4),partTexture=new T.DataTexture(data,width,1,T.RGBAFormat,T.FloatType);partTexture.needsUpdate=true;
   const selectedData=new Uint8Array(width*4),selectionTexture=new T.DataTexture(selectedData,width,1);selectionTexture.needsUpdate=true;
   const materials:T.Material[]=[],geometries:T.BufferGeometry[]=[],pickers:(T.Mesh|undefined)[]=[],centers=atlas.parts.map(p=>new T.Vector3().fromArray(p.bounds[0]).add(new T.Vector3().fromArray(p.bounds[1])).multiplyScalar(.5));
@@ -97,6 +241,7 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
   const clock=new T.Clock();let lastExtent=-1;
   const animate=()=>{
    if(disposed)return;frame=requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),s=latest.current;
+   marbleUniforms.uTime.value = clock.getElapsedTime();
    const changed=lastState?.visible!==s.visible||lastState?.selected!==s.selected||lastState?.isolate!==s.isolate;
    const moving=Math.abs(amount-s.explode)>.0001;
    if(moving){amount=T.MathUtils.damp(amount,s.explode,8,dt);dirty=true;}
@@ -123,12 +268,12 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
     }else if(lastIsolate){camera.clearViewOffset();fit(s.view,amount);}
     lastIsolate=isolateKey;
    }
-   controls.enableRotate=amount<.8;controls.mouseButtons.LEFT=amount<.8?T.MOUSE.ROTATE:T.MOUSE.PAN;controls.touches.ONE=amount<.8?T.TOUCH.ROTATE:T.TOUCH.PAN;ground.visible=platform.visible=ring.visible=innerRing.visible=amount<.5&&!s.isolate;markers.visible=amount>.75;controls.autoRotate=s.rotate&&!s.isolate&&amount<.4;controls.autoRotateSpeed=.65;controls.update();if(controls.autoRotate)dirty=true;
+   controls.enableRotate=amount<.8;controls.mouseButtons.LEFT=amount<.8?T.MOUSE.ROTATE:T.MOUSE.PAN;controls.touches.ONE=amount<.8?T.TOUCH.ROTATE:T.TOUCH.PAN;marbleFloor.visible=platform.visible=ring.visible=innerRing.visible=amount<.5&&!s.isolate;markers.visible=amount>.75;controls.autoRotate=s.rotate&&!s.isolate&&amount<.4;controls.autoRotateSpeed=.65;controls.update();if(controls.autoRotate)dirty=true;
    if(dirty){renderer.render(scene,camera);targets=[];if(amount>.45){const hasSolid=atlas.parts.some((p,i)=>p.system!=='integumentary'&&data[i*4+3]>.5);atlas.parts.forEach((p,i)=>{if(data[i*4+3]<.5||(hasSolid&&p.system==='integumentary'))return;let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;for(let corner=0;corner<8;corner++){projected.set(p.bounds[(corner&1)?1:0][0]+data[i*4],p.bounds[(corner&2)?1:0][1]+data[i*4+1],p.bounds[(corner&4)?1:0][2]+data[i*4+2]).project(camera);const x=(projected.x+1)*el.clientWidth/2,y=(1-projected.y)*el.clientHeight/2;left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,y);bottom=Math.max(bottom,y);}projected.copy(centers[i]).add(new T.Vector3(data[i*4],data[i*4+1],data[i*4+2])).project(camera);if(projected.z< -1||projected.z>1)return;targets.push({index:i,x:(projected.x+1)*el.clientWidth/2,y:(1-projected.y)*el.clientHeight/2,left,right,top,bottom});});}dirty=false;}
 
   };animate();
   const contextLost=(e:Event)=>{e.preventDefault();onError('The 3D session was paused by your device. Reload to continue.');};renderer.domElement.addEventListener('webglcontextlost',contextLost);
-  return()=>{disposed=true;abort.abort();cancelAnimationFrame(frame);observer.disconnect();controls.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());scene.traverse(o=>{if(o instanceof T.Mesh&&!geometries.includes(o.geometry)){o.geometry.dispose();const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose());}});env.dispose();partTexture.dispose();selectionTexture.dispose();markerGeometry.dispose();markerMaterial.dispose();hover.remove();renderer.dispose();renderer.domElement.remove();};
+  return()=>{disposed=true;abort.abort();cancelAnimationFrame(frame);observer.disconnect();themeObs.disconnect();controls.dispose();geometries.forEach(g=>g.dispose());materials.forEach(m=>m.dispose());marbleMaterial.dispose();marbleFloor.geometry.dispose();scene.traverse(o=>{if(o instanceof T.Mesh&&!geometries.includes(o.geometry)){o.geometry.dispose();const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose());}});env.dispose();partTexture.dispose();selectionTexture.dispose();markerGeometry.dispose();markerMaterial.dispose();hover.remove();renderer.dispose();renderer.domElement.remove();};
  },[atlas]);
  return <div className="scene" ref={host}/>;
 }
