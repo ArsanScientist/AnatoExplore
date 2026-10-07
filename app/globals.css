@@ -237,27 +237,41 @@ h1 .edition{font-family:inherit;font-weight:500;font-size:10px;letter-spacing:.0
 @media(max-width:767px){h1{font-size:28px;gap:9px}.eyebrow{font-size:9px}.top-actions{gap:5px;right:14px}.top-actions button{width:38px;height:40px;padding:0;border-radius:9px}.top-actions .icon-button{min-width:38px;width:38px}.identity-meta{font-size:10px}.anatomy-choice [data-slot=select-trigger]{min-height:40px}.layers-panel.mobile-open{border-radius:16px;padding:10px 14px 0}.layer-presets button{height:38px;font-size:12px}.system-row,.system-name{min-height:44px}.system-name{font-size:13px}.system-list{padding-right:12px}.panel-heading{font-size:13px}.panel-heading .mobile-only{height:40px;padding:0}.bottom-dock{padding:13px;gap:14px;border-radius:14px}.dock-layers{padding-right:12px;font-size:10px}.dock-reset{padding-left:12px}.explode-label{font-size:11px}.scene-caption{font-size:8px}.detail-sheet{border-radius:16px}.detail-header .structure-title{font-size:22px!important}.detail-actions{gap:3px}.search-panel{top:161px}.about-sheet{border-radius:0}}
 @media(max-height:600px) and (orientation:landscape){.layers-panel.mobile-open{top:132px}.bottom-dock{padding:10px 15px}.search-panel{top:70px}}
 
-/* Touch layouts keep camera controls outside the selectable anatomy. */
+/* ===== Touch / safe-area layouts ===== */
 .scene-caption{max-width:calc(100% - 32px);white-space:normal;text-align:center;overflow-wrap:anywhere}
 .scene-caption>span:not(.caption-line){min-width:0}.caption-line{flex-shrink:0}
 .structure-title{overflow-wrap:anywhere}.detail-header .structure-title:focus{outline:none}
+
+/* ── mobile (portrait phones ≤767px) ── */
 @media(max-width:767px){
  .identity{left:max(16px,env(safe-area-inset-left));top:max(18px,env(safe-area-inset-top))}
  .top-actions{right:max(12px,env(safe-area-inset-right));gap:4px}
  .top-actions button,.top-actions .icon-button{width:44px;min-width:44px;height:44px;min-height:44px}
+ /* view-controls: horizontal strip just below the header */
  .view-controls{top:max(112px,calc(env(safe-area-inset-top) + 94px));right:12px;left:12px;transform:none;flex-direction:row;justify-content:center;gap:2px;width:fit-content;max-width:calc(100% - 24px);margin-inline:auto;padding:4px;border-radius:12px}
  .view-controls button{width:44px;height:44px;flex-shrink:0}.view-controls i{width:1px;height:28px;margin:8px 4px}
+ /* bottom dock: anchored above safe-area, full width */
  .bottom-dock{left:12px;right:12px;width:auto;transform:none;max-width:520px;margin-inline:auto}
  .dock-layers,.dock-reset{min-width:44px;min-height:48px}.dock-reset{padding-left:8px}.dock-layers{padding-right:8px}
  .explode-control [data-slot=slider]{padding-block:13px}.explode-control [data-slot=slider-thumb]::after{inset:-14px}
+ /* layers panel preset/foot touch targets */
  .layer-presets button{min-height:44px;height:44px}.panel-foot button{min-height:44px;min-width:48px}
  .system-row [data-slot=switch]::after{inset:-13px -6px}
+ /* search panel */
  .search-panel{top:max(108px,calc(env(safe-area-inset-top) + 90px))}.search-panel input{font-size:16px}
  .search-note{display:none}.anatomy-search-results{max-height:min(360px,calc(100dvh - 220px))!important}
  .anatomy-search-results [data-slot=combobox-item]{white-space:normal;overflow-wrap:anywhere}
+ /* detail sheet typography */
  .detail-sheet{gap:12px!important}.detail-header{gap:7px}.detail-header .structure-title{font-size:20px!important;line-height:1.2!important}
- .detail-actions .secondary-action{min-height:44px}.detail-scroll{min-height:48px}.detail-actions{padding-top:6px} .about-copy a{min-height:44px}.studio-footer button{min-height:24px}
+ .detail-actions .secondary-action{min-height:44px}.detail-scroll{min-height:48px}.detail-actions{padding-top:6px}
+ .about-copy a{min-height:44px}.studio-footer button{min-height:24px}
+ /* hide scene-caption on mobile — it collides with layers panel and dock */
+ .scene-caption{display:none}
+ /* loading indicator fits narrow screens */
+ .loading{min-width:min(290px,calc(100vw - 32px));max-width:calc(100vw - 32px)}
 }
+
+/* ── very small phones (≤350px) ── */
 @media(max-width:350px){
  h1{font-size:24px;gap:6px}.identity-meta{font-size:9px}.eyebrow{font-size:8px}
  .top-actions{gap:2px}.top-actions button,.top-actions .icon-button{width:44px;min-width:44px}
@@ -265,65 +279,39 @@ h1 .edition{font-family:inherit;font-weight:500;font-size:10px;letter-spacing:.0
  .detail-sheet{padding:14px!important}.detail-header .structure-title{font-size:18px!important}.detail-header{padding-right:18px}
  .detail-actions{gap:0}.detail-sheet .primary-action{min-height:44px}.detail-sheet .secondary-action{min-height:36px}
 }
+
+/* ── tablet portrait / narrow laptop (768–1024px) ── */
+@media(min-width:768px) and (max-width:1024px){
+ /* identity — shrink h1 so it doesn't crowd top-actions */
+ h1{font-size:26px;letter-spacing:-1px}
+ .identity-meta{font-size:10px}
+ /* layers panel — narrower to leave canvas room */
+ .layers-panel{width:210px;left:16px;padding-inline:10px}
+ .system-name{font-size:11px}
+ .system-count{display:none}
+ /* search panel — cap width so it stays on screen */
+ .search-panel{width:min(300px,calc(100vw - 280px));right:16px}
+ /* view controls — tuck in from right edge */
+ .view-controls{right:16px}
+ /* bottom dock — full shrink to fill narrower viewport */
+ .bottom-dock{width:min(420px,calc(100vw - 32px))}
+ /* top-actions closer to edge */
+ .top-actions{right:16px}
+}
+
+/* ── landscape phone (short + wide, ≤600px tall) ── */
 @media(max-height:600px) and (orientation:landscape){
  .view-controls{top:76px;left:auto;right:max(12px,env(safe-area-inset-right));transform:none;flex-direction:row;width:auto;margin:0}
  .view-controls button{width:44px;height:44px}.view-controls i{width:1px;height:28px;margin:8px 4px}
- .layers-panel.mobile-open{top:12px;bottom:12px;left:max(12px,env(safe-area-inset-left));width:280px;max-height:none}
+ .layers-panel.mobile-open{top:12px;bottom:12px;left:max(12px,env(safe-area-inset-left));width:260px;max-height:none}
  body:has(.detail-sheet) .view-controls,body:has(.detail-sheet) .top-actions{visibility:hidden}
- .search-panel{top:72px;width:350px;left:auto;right:12px}.search-panel input{font-size:16px}.search-note{display:none}
+ .search-panel{top:72px;width:min(320px,calc(100vw - 32px));left:auto;right:12px}.search-panel input{font-size:16px}.search-note{display:none}
  .anatomy-search-results{max-height:calc(100dvh - 190px)!important}
+ .scene-caption{display:none}
 }
+
+/* ── hide view-controls when detail sheet is open on mobile ── */
 @media(max-width:767px){body:has(.detail-sheet) .view-controls{visibility:hidden}}
 
+/* ── landscape: dock shifts left of detail sheet ── */
 @media(max-height:600px) and (orientation:landscape){body:has(.detail-sheet) .bottom-dock{left:12px;right:324px;width:auto;transform:none;max-width:none;margin:0}}
-
-/* ===== RESPONSIVE FIXES: all-device polish ===== */
-
-/* --- Loading indicator: prevent overflow on 320px screens --- */
-.loading { min-width: min(290px, calc(100vw - 32px)); }
-
-/* --- h1 scale-down at tablet widths to avoid identity/top-actions collision --- */
-@media(max-width:900px) {
-  h1 { font-size: 26px; }
-}
-
-/* --- Layers panel at tablet: narrower, no canvas overlap --- */
-@media(max-width:900px) {
-  .layers-panel { width: 200px; left: 16px; }
-}
-
-/* --- Search panel at tablet: prevent spill off-screen --- */
-@media(max-width:900px) {
-  .search-panel { width: min(300px, calc(100vw - 60px)); }
-}
-
-/* --- Bottom dock at narrow tablets (600-768px): full shrink --- */
-@media(max-width:768px) and (min-width:480px) {
-  .bottom-dock { max-width: min(460px, calc(100vw - 32px)); }
-}
-
-/* --- Detail sheet on tablet (768–1024px): glass variant --- */
-@media(min-width:768px) and (max-width:1024px) {
-  .detail-sheet { background: var(--glass-bg-strong) !important; }
-}
-
-/* --- Dark mode top-actions buttons specificity fix --- */
-.dark .top-actions button {
-  background: var(--glass-bg) !important;
-  border-color: var(--glass-border) !important;
-  color: #b0bec8;
-}
-.dark .top-actions button:hover {
-  background: var(--glass-bg-strong) !important;
-}
-
-/* --- detail-sheet: ensure internal gap when inline gap:16 is set (desktop) --- */
-@media(min-width:768px) {
-  .detail-sheet .detail-header { margin-bottom: 0; }
-  .detail-sheet .detail-actions { padding-top: 10px; }
-}
-
-/* --- View-controls on tablet: keep away from dock bottom --- */
-@media(min-width:768px) and (max-width:1000px) {
-  .view-controls { right: 16px; }
-}
