@@ -249,6 +249,7 @@ export default function AnatomyScene({atlas,state,onSelect,onProgress,onError}:P
      if(mm.userData.isIsolateUniform) mm.userData.isIsolateUniform.value=s.isolate?1:0;
    });
    const changed=lastState?.visible!==s.visible||lastState?.selected!==s.selected||lastState?.isolate!==s.isolate;
+   renderer.setClearColor(s.isolate ? 0x1f262d : 0x000000, s.isolate ? 1 : 0);
    const moving=Math.abs(amount-s.explode)>.0001;
    if(moving){amount=T.MathUtils.damp(amount,s.explode,8,dt);dirty=true;}
    if(changed||moving||lastExtent<0){
